@@ -1,3 +1,4 @@
+
 #include <smmintrin.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -31,8 +32,12 @@ int main() {
 		suma=_mm_add_epi32(v1,cinco_pos);
 		resta=_mm_sub_epi32(v1,cinco_pos);
 
-		resultado=_mm_blendv_epi8(suma,resta,mask);
+		/* resultado=_mm_blendv_epi8(suma,resta,mask); */
 
+		__m128i resultado = _mm_or_si128(
+            _mm_and_si128(mask, resta),      // Valores que cumplen la condición
+            _mm_andnot_si128(mask, suma)     // Valores que NO la cumplen
+        );
 		//Guardar resultado
 		_mm_store_si128((__m128i*)puntero,resultado);
 
