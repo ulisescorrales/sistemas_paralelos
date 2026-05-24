@@ -1,4 +1,4 @@
-/* gcc punto5_c.c -o punto5_c -fopenmp */
+/* gcc punto5_d.c -o punto5_d -fopenmp */
 #include <string.h>
 #include <omp.h>
 #include <stdio.h>
@@ -10,31 +10,30 @@ void main () {
    step = 1.0/(double) num_steps;
 
 	int cant_threads=omp_get_max_threads();
-	double sum[cant_threads][8];
+	double sum=0.0;
 	printf("max cant threads: %d\n",cant_threads);
 	memset(&sum,0,sizeof(sum));
 
 	omp_set_dynamic(1);
 
-	#pragma omp parallel private(x)
+	double sumaTotal=0.0;
+	#pragma omp parallel private(x,sum)
 	{
 		printf("Arranca thread Nº %d\n",omp_get_thread_num());
-		int porcion_step=num_steps/omp_get_num_threads();
+		int cant_threads=omp_get_num_threads();
+		int porcion_step=num_steps/cant_threads;
 		int num_thread=omp_get_thread_num();
 		long step_ini=porcion_step*num_thread;
 		long step_final=step_ini+porcion_step;
 		for (int i=step_ini;i<step_final;i++){
       		x = (i + 0.5) * step;
-			sum[num_thread][0]+=4.0 / (1.0 + x * x);
+			sum+=4.0 / (1.0 + x * x);
 		}
+		#pragma omp critical
+		sumaTotal+=sum;
 	}
-	double sumTotal=0.0;
-	int j=0;
-	while(sum[j][0]!=0.0){
-		sumTotal+=(double)sum[j][0];
-		j++;
-	}
-   pi = step * sumTotal;
+
+   pi = step * sumaTotal;
    printf("%f\n",pi);
 }
 
