@@ -1,4 +1,4 @@
-// mpicc -o punto10 punto10.c
+// mpicc -o punto11 punto11.c
 #include </usr/lib/x86_64-linux-gnu/openmpi/include/mpi.h>
 #include <stdio.h>
 #include <stdlib.h>                                                                                                                                                                    
