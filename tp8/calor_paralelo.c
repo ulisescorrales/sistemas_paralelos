@@ -15,6 +15,7 @@ double sampleTime() {
 }
 
 int main(int argc, char *argv[]) {
+	MPI_Init(&argc, &argv);
 	register int p, i, j; //Variables para iteración de bucles
 	if(argc != 3) {
 		printf("Parámetros: Tlado pasos\n");
@@ -26,6 +27,19 @@ int main(int argc, char *argv[]) {
 		printf("ERROR: valores incorrectos en parámetros\n");
 		exit(1);
 	}
+
+	//Cantidad de procesos por ahora divide a la matriz en partes iguales
+	//Matriz= Tlado*Tlado
+	//Cada proceso tendrá (Tlado*Tlado)/procesos
+	//Tlado será Tlado/procesos
+	//ladoProceso=(Tlado/procesos)*
+	//cantElementosProceso=ladoProceso*ladoProceso
+	int cantProcesos;
+	MPI_Comm_size(MPI_COMM_WORLD,&cantProcesos);
+	int ladoProceso=Tlado/cantProcesos;
+
+	int rank;
+	MPI_Comm_rank(MPI_COMM_WORLD,&rank);
 
 	int columnas = Tlado;
 	int filas = Tlado;
@@ -43,12 +57,13 @@ int main(int argc, char *argv[]) {
 	float **aux; //Puntero auxiliar para intercambio de punteros
 
 	//Reserva de espacio para la matriz Actual
-	matrizActual = (float **)malloc(sizeof(float *) * Tlado);
-	*matrizActual = (float *)malloc(sizeof(float) * Tlado * Tlado);
+	//matrizActual es unidimensional y es un puntero a una matriz
+	matrizActual = (float **)malloc(sizeof(float *) * ladoProceso);
+	*matrizActual = (float *)malloc(sizeof(float) * ladoProceso * ladoProceso);
 
 	//Reserva de espacio para la matriz Siguiente
-	matrizSiguiente  = (float **)malloc(sizeof(float *) * Tlado);
-	*matrizSiguiente = (float *)malloc(sizeof(float) * Tlado * Tlado);
+	matrizSiguiente  = (float **)malloc(sizeof(float *) * ladoProceso);
+	*matrizSiguiente = (float *)malloc(sizeof(float) * ladoProceso * ladoProceso);
 
 	if (matrizActual == NULL || matrizSiguiente == NULL){
 		printf("ERROR: No se pudo reservar memoria\n");
@@ -56,15 +71,15 @@ int main(int argc, char *argv[]) {
 	}
 
 	//Se calculan las direcciones de las filas
-	for(i = 1; i < Tlado; i++){
-		matrizActual[i] = *matrizActual + Tlado * i;
-		matrizSiguiente[i] = *matrizSiguiente + Tlado * i;
+	for(i = 1; i < ladoProceso; i++){
+		matrizActual[i] = *matrizActual + ladoProceso * i;
+		matrizSiguiente[i] = *matrizSiguiente + ladoProceso * i;
 	}
-
+	int offset=rank*ladoProceso;
 	//Inicialización de la matriz Actual
-	for (i = 0; i < Tlado; i++)
-		for (j = 0; j < Tlado; j++)
-			matrizActual[i][j] = (float)(i+1) * (Tlado + i) * (j+1) * (Tlado + j);
+	for (i = 0; i < ladoProceso; i++)
+		for (j = 0; j < ladoProceso; j++)
+			matrizActual[i][j] = (float)(i+offset+1) * (ladoProceso + i+offset) * (j+offset+1) * (ladoProceso + j+offset);
 
 	//Ejecución de los pasos de simulación
 	double time_spent = sampleTime();
@@ -176,20 +191,23 @@ int main(int argc, char *argv[]) {
 
 	//Se almacena la matriz final en un archivo
 	char nombre[30];
-	i = j = 0;
+	i = j = rank;
+	//Cambiar i j por el rank
 	sprintf(nombre, "subgrid_%d_%d.out", i, j);
 	FILE *f = fopen(nombre, "w");
 	if (f == NULL) {
 		printf("ERROR: No se pudo abrir el archivo\n");
 		exit(1);
 	}
-	for (i = 0; i <  Tlado; i++) {
-		for (j = 0; j < Tlado; j++)
+	//Solo imprime la matriz actual
+	for (i = 0; i <  ladoProceso; i++) {
+		for (j = 0; j < ladoProceso; j++)
 			fprintf(f, "%8.3f ", matrizActual[i][j]);
 		fprintf(f, "\n");
 	}
 	fclose(f);
 
+	MPI_Finalize();
 	return 0;
 }
 
