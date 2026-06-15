@@ -76,6 +76,7 @@ int main(int argc, char *argv[]) {
 	
 	MPI_Datatype tipo_col;
 	MPI_Type_vector(TladoProc,1,TladoProc,MPI_FLOAT,&tipo_col);
+	MPI_Type_commit(&tipo_col);
 
 	//CALCULAR POSICION EN LA GRILLA
 	int rank;
@@ -141,18 +142,21 @@ int main(int argc, char *argv[]) {
 		matrizSiguiente[i] = *matrizSiguiente + TladoProc * i;
 	}
 
+	printf("Inicializando\n");
 	//Inicialización de la matriz Actual
-	for (i = 0; i < TladoProc; i++)
-		for (j = 0; j < TladoProc; j++)
+	for (i = 0; i < Tlado; i++)
+		for (j = 0; j < Tlado; j++)
 			if(i>=filaP*TladoProc && i<((filaP+1)*TladoProc)
 					&& j>=columnaP*TladoProc && j<((columnaP+1)*TladoProc)
-				)
-			matrizActual[i][j] = (float)(i+1) * (TladoProc + i) * (j+1) * (TladoProc + j);
-	printf("Inicializado\n");
-	//INFORMAR Y RECIBIR BORDES
-	//
-	//
+				){
+			int i2=i%filas;
+			int j2=j%columnas;
+			/* printf("rank %d [%d][%d],\n",rank,i,j); */
+			matrizActual[i2][j2] = (float)(i+1) * (Tlado + i) * (j+1) * (Tlado + j);
+			/* printf("rank %d [%d][%d]: %f,\n",rank,i,j,matrizActual[i2][j2]); */
+			}
 
+	printf("Fin inicio\n");
 	/* printf("proceso: %d, fila: %d, col: %d\n",rank,coords[0],coords[1]); */
 	/* exit(0); */
 
@@ -176,23 +180,24 @@ int main(int argc, char *argv[]) {
 
 		//INFORMAR Y RECIBIR BORDES
 		if(rank_arriba!=MPI_PROC_NULL){
+			printf("rank: %d, envía a %d\n",rank,rank_arriba);
 			MPI_Isend(matrizActual[0],TladoProc,MPI_FLOAT,rank_arriba,0,cart,&send_arriba);
-			MPI_Irecv(fila_arriba,TladoProc,MPI_INT,rank_arriba,MPI_ANY_TAG,cart,&recv_arriba);
+			MPI_Irecv(fila_arriba,TladoProc,MPI_FLOAT,rank_arriba,MPI_ANY_TAG,cart,&recv_arriba);
 		}
 		if(rank_abajo!=MPI_PROC_NULL){
 			MPI_Isend(matrizActual[TladoProc-1],TladoProc,MPI_FLOAT,rank_abajo,0,cart,&send_abajo);
-			MPI_Irecv(fila_abajo,TladoProc,MPI_INT,rank_abajo,MPI_ANY_TAG,cart,&recv_abajo);
+			MPI_Irecv(fila_abajo,TladoProc,MPI_FLOAT,rank_abajo,MPI_ANY_TAG,cart,&recv_abajo);
 		}
 		if(rank_izq!=MPI_PROC_NULL){
-			MPI_Isend(matrizActual[0],TladoProc,tipo_col,rank_izq,0,cart,&send_izq);
-			MPI_Irecv(columna_izquierda,TladoProc,MPI_INT,rank_izq,MPI_ANY_TAG,cart,&recv_izq);
+			MPI_Isend(matrizActual[0],1,tipo_col,rank_izq,0,cart,&send_izq);
+			MPI_Irecv(columna_izquierda,TladoProc,MPI_FLOAT,rank_izq,MPI_ANY_TAG,cart,&recv_izq);
 		}
 		if(rank_der!=MPI_PROC_NULL){
-			MPI_Isend(matrizActual[0],TladoProc,tipo_col,rank_der,0,cart,&send_der);
-			MPI_Irecv(columna_derecha,TladoProc,MPI_INT,rank_der,MPI_ANY_TAG,cart,&recv_der);
+			MPI_Isend(&matrizActual[0][TladoProc-1],1,tipo_col,rank_der,0,cart,&send_der);
+			MPI_Irecv(columna_derecha,TladoProc,MPI_FLOAT,rank_der,MPI_ANY_TAG,cart,&recv_der);
 		}
 
-		printf("TladoProc: %d,filas: %d, columnas: %d\n",TladoProc,filas,columnas);
+		/* printf("TladoProc: %d,filas: %d, columnas: %d\n",TladoProc,filas,columnas); */
 		//Se procesa el interior
 		for (i = 1; i < filas-1; i++)
 			for (j = 1; j < columnas-1; j++) {
@@ -204,10 +209,10 @@ int main(int argc, char *argv[]) {
 				e_der = matrizActual[i][j+1];
 				matrizSiguiente[i][j] = yo+Cx*(e_abajo+e_arriba-2*yo)+Cy*(e_der+e_izq-2*yo);
 			}
-		exit(0);
 		//Se procesa fila superior
 		i = 0;
 
+		printf("OK\n");
 		MPI_Wait(&recv_arriba,MPI_STATUS_IGNORE);
 
 		for (j = 1; j < columnas-1; j++) {
@@ -305,15 +310,16 @@ int main(int argc, char *argv[]) {
 
 	//Se almacena la matriz final en un archivo
 	char nombre[30];
-	i = j = 0;
+	i = filaP;
+	j = columnaP;
 	sprintf(nombre, "subgrid_%d_%d.out", i, j);
 	FILE *f = fopen(nombre, "w");
 	if (f == NULL) {
 		printf("ERROR: No se pudo abrir el archivo\n");
 		exit(1);
 	}
-	for (i = 0; i <  Tlado; i++) {
-		for (j = 0; j < Tlado; j++)
+	for (i = 0; i <  TladoProc; i++) {
+		for (j = 0; j < TladoProc; j++)
 			fprintf(f, "%8.3f ", matrizActual[i][j]);
 		fprintf(f, "\n");
 	}
