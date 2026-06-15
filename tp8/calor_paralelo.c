@@ -1,4 +1,4 @@
-//mpicc -o calor_paralelo calor_paralelo.c -lm
+//mpicc -o calor_paralel calor_paralelo.c -lm
 #include <unistd.h> 
 #include <math.h>
 #include </usr/lib/x86_64-linux-gnu/openmpi/include/mpi.h>
@@ -39,7 +39,7 @@ double sampleTime() {
 }
 
 int main(int argc, char *argv[]) {
-	MPI_Init(&argc,&argv);
+	MPI_Init(&argc, &argv);
 	register int p, i, j; //Variables para iteración de bucles
 	if(argc != 3) {
 		printf("Parámetros: Tlado pasos\n");
