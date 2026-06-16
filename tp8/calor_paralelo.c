@@ -1,4 +1,4 @@
-//mpicc -o calor_paralel calor_paralelo.c -lm
+//mpicc -o calor_paralelo calor_paralelo.c -lm
 #include <unistd.h> 
 #include <math.h>
 #include </usr/lib/x86_64-linux-gnu/openmpi/include/mpi.h>
@@ -56,6 +56,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	struct Multiplicacion multiplos=getMultiplicacionBalanceada(cantProcesos);
+	printf("Multiplos: %d x %d\n",multiplos.numero1,multiplos.numero2);
 
 
 	int pasos = atoi(argv[2]); //M --> Cantidad de pasos
@@ -68,15 +69,11 @@ int main(int argc, char *argv[]) {
 
 	//crear grilla cuadrada
 	int dims[]={multiplos.numero1,multiplos.numero2};
+	printf("dims: %d, %d\n",dims[0],dims[1]);
 	int periods[]={0,0};
 	MPI_Comm cart;
 	MPI_Cart_create(MPI_COMM_WORLD,2,dims,periods,0,&cart);
 
-	//Definir tipo de dato columna
-	
-	MPI_Datatype tipo_col;
-	MPI_Type_vector(TladoProc,1,TladoProc,MPI_FLOAT,&tipo_col);
-	MPI_Type_commit(&tipo_col);
 
 	//CALCULAR POSICION EN LA GRILLA
 	int rank;
@@ -85,8 +82,9 @@ int main(int argc, char *argv[]) {
 	MPI_Cart_coords(cart,rank,2,coords);
 	int filaP=coords[0];
 	int columnaP=coords[1];
-	int columnas = TladoProc;
-	int filas = TladoProc;
+	int filas = Tlado/multiplos.numero1;
+	int columnas = Tlado/multiplos.numero2;
+	printf("filas: %d, columnas: %d\n",filas,columnas);
 	int columnasT=Tlado;
 	int filasT=Tlado;
 
@@ -95,6 +93,12 @@ int main(int argc, char *argv[]) {
 	float *columna_izquierda = malloc(sizeof(float)*filas);
 	float *columna_derecha = malloc(sizeof(float)*filas);
 	
+	//Definir tipo de dato columna
+	
+	MPI_Datatype tipo_col;
+	MPI_Type_vector(filas,1,filas,MPI_FLOAT,&tipo_col);
+	MPI_Type_commit(&tipo_col);
+
 	int rank_arriba;
 	int rank_abajo;
 	MPI_Cart_shift(cart,0,1,&rank_arriba,&rank_abajo);
@@ -121,13 +125,13 @@ int main(int argc, char *argv[]) {
 	float **aux; //Puntero auxiliar para intercambio de punteros
 
 	//Reserva de espacio para la matriz Actual
-	matrizActual = (float **)malloc(sizeof(float *) * TladoProc);
+	matrizActual = (float **)malloc(sizeof(float *) * filas);
 	//en matrizActual[0] se apunta el primer elemento de la matri completa
-	*matrizActual = (float *)malloc(sizeof(float) * TladoProc * TladoProc);
+	*matrizActual = (float *)malloc(sizeof(float) * filas * columnas);
 
 	//Reserva de espacio para la matriz Siguiente
-	matrizSiguiente  = (float **)malloc(sizeof(float *) * TladoProc);
-	*matrizSiguiente = (float *)malloc(sizeof(float) * TladoProc * TladoProc);
+	matrizSiguiente  = (float **)malloc(sizeof(float *) * filas);
+	*matrizSiguiente = (float *)malloc(sizeof(float) * filas * columnas);
 
 	if (matrizActual == NULL || matrizSiguiente == NULL){
 		printf("ERROR: No se pudo reservar memoria\n");
@@ -135,23 +139,22 @@ int main(int argc, char *argv[]) {
 	}
 
 	//Se calculan las direcciones de las filas
-	for(i = 1; i < TladoProc; i++){
+	for(i = 1; i < filas; i++){
 		//Para i=0 ya se hizo antes
 		//matrizActual[i] tiene puntero a la fila
-		matrizActual[i] = *matrizActual + TladoProc * i;
-		matrizSiguiente[i] = *matrizSiguiente + TladoProc * i;
+		matrizActual[i] = *matrizActual + columnas * i;
+		matrizSiguiente[i] = *matrizSiguiente + columnas * i;
 	}
 
 	printf("Inicializando\n");
 	//Inicialización de la matriz Actual
 	for (i = 0; i < Tlado; i++)
 		for (j = 0; j < Tlado; j++)
-			if(i>=filaP*TladoProc && i<((filaP+1)*TladoProc)
-					&& j>=columnaP*TladoProc && j<((columnaP+1)*TladoProc)
+			if(i>=filaP*filas && i<((filaP+1)*filas)
+					&& j>=columnaP*columnas && j<((columnaP+1)*columnas)
 				){
 			int i2=i%filas;
 			int j2=j%columnas;
-			/* printf("rank %d [%d][%d],\n",rank,i,j); */
 			matrizActual[i2][j2] = (float)(i+1) * (Tlado + i) * (j+1) * (Tlado + j);
 			/* printf("rank %d [%d][%d]: %f,\n",rank,i,j,matrizActual[i2][j2]); */
 			}
@@ -180,21 +183,20 @@ int main(int argc, char *argv[]) {
 
 		//INFORMAR Y RECIBIR BORDES
 		if(rank_arriba!=MPI_PROC_NULL){
-			printf("rank: %d, envía a %d\n",rank,rank_arriba);
-			MPI_Isend(matrizActual[0],TladoProc,MPI_FLOAT,rank_arriba,0,cart,&send_arriba);
-			MPI_Irecv(fila_arriba,TladoProc,MPI_FLOAT,rank_arriba,MPI_ANY_TAG,cart,&recv_arriba);
+			MPI_Isend(matrizActual[0],columnas,MPI_FLOAT,rank_arriba,0,cart,&send_arriba);
+			MPI_Irecv(fila_arriba,columnas,MPI_FLOAT,rank_arriba,MPI_ANY_TAG,cart,&recv_arriba);
 		}
 		if(rank_abajo!=MPI_PROC_NULL){
-			MPI_Isend(matrizActual[TladoProc-1],TladoProc,MPI_FLOAT,rank_abajo,0,cart,&send_abajo);
-			MPI_Irecv(fila_abajo,TladoProc,MPI_FLOAT,rank_abajo,MPI_ANY_TAG,cart,&recv_abajo);
+			MPI_Isend(matrizActual[filas-1],columnas,MPI_FLOAT,rank_abajo,0,cart,&send_abajo);
+			MPI_Irecv(fila_abajo,columnas,MPI_FLOAT,rank_abajo,MPI_ANY_TAG,cart,&recv_abajo);
 		}
 		if(rank_izq!=MPI_PROC_NULL){
 			MPI_Isend(matrizActual[0],1,tipo_col,rank_izq,0,cart,&send_izq);
-			MPI_Irecv(columna_izquierda,TladoProc,MPI_FLOAT,rank_izq,MPI_ANY_TAG,cart,&recv_izq);
+			MPI_Irecv(columna_izquierda,filas,MPI_FLOAT,rank_izq,MPI_ANY_TAG,cart,&recv_izq);
 		}
 		if(rank_der!=MPI_PROC_NULL){
-			MPI_Isend(&matrizActual[0][TladoProc-1],1,tipo_col,rank_der,0,cart,&send_der);
-			MPI_Irecv(columna_derecha,TladoProc,MPI_FLOAT,rank_der,MPI_ANY_TAG,cart,&recv_der);
+			MPI_Isend(&matrizActual[0][columnas-1],1,tipo_col,rank_der,0,cart,&send_der);
+			MPI_Irecv(columna_derecha,columnas,MPI_FLOAT,rank_der,MPI_ANY_TAG,cart,&recv_der);
 		}
 
 		/* printf("TladoProc: %d,filas: %d, columnas: %d\n",TladoProc,filas,columnas); */
@@ -212,7 +214,6 @@ int main(int argc, char *argv[]) {
 		//Se procesa fila superior
 		i = 0;
 
-		printf("OK\n");
 		MPI_Wait(&recv_arriba,MPI_STATUS_IGNORE);
 
 		for (j = 1; j < columnas-1; j++) {
@@ -318,9 +319,17 @@ int main(int argc, char *argv[]) {
 		printf("ERROR: No se pudo abrir el archivo\n");
 		exit(1);
 	}
-	for (i = 0; i <  TladoProc; i++) {
-		for (j = 0; j < TladoProc; j++)
+	/* printf("rank %d: escribiendo %s\n",rank,nombre); */
+	/* printf("filas: %d, columnas: %d\n",filas,columnas); */
+
+	/* printf("rank: %d, coords[0]: %d, coords[1]: %d\n",rank,coords[0],coords[1]); */
+
+	for (i = 0; i <  filas; i++) {
+		for (j = 0; j < columnas; j++){
+			/* printf("rank %d: %d - %d\n",rank,i,j); */
+			printf("rank %d [%d][%d]: %f,\n",rank,i,j,matrizActual[i][j]);
 			fprintf(f, "%8.3f ", matrizActual[i][j]);
+		}
 		fprintf(f, "\n");
 	}
 	fclose(f);
