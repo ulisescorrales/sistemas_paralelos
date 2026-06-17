@@ -148,16 +148,16 @@ int main(int argc, char *argv[]) {
 
 	printf("Inicializando\n");
 	//Inicialización de la matriz Actual
-	for (i = 0; i < Tlado; i++)
-		for (j = 0; j < Tlado; j++)
-			if(i>=filaP*filas && i<((filaP+1)*filas)
-					&& j>=columnaP*columnas && j<((columnaP+1)*columnas)
-				){
+	int limiteFilas=(filaP+1)*filas;
+	int limiteColumnas=((columnaP+1)*columnas);
+	for (i = filaP*filas; i < limiteFilas; i++)
+		for (j = columnaP*columnas; j < limiteColumnas; j++)
+		{
 			int i2=i%filas;
 			int j2=j%columnas;
 			matrizActual[i2][j2] = (float)(i+1) * (Tlado + i) * (j+1) * (Tlado + j);
 			/* printf("rank %d [%d][%d]: %f,\n",rank,i,j,matrizActual[i2][j2]); */
-			}
+		}
 
 	printf("Fin inicio\n");
 	/* printf("proceso: %d, fila: %d, col: %d\n",rank,coords[0],coords[1]); */
@@ -320,7 +320,7 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 	/* printf("rank %d: escribiendo %s\n",rank,nombre); */
-	/* printf("filas: %d, columnas: %d\n",filas,columnas); */
+	printf("filas: %d, columnas: %d\n",filas,columnas);
 
 	/* printf("rank: %d, coords[0]: %d, coords[1]: %d\n",rank,coords[0],coords[1]); */
 
