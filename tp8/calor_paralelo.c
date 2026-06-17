@@ -49,14 +49,9 @@ int main(int argc, char *argv[]) {
 	
 	int cantProcesos;
 	MPI_Comm_size(MPI_COMM_WORLD,&cantProcesos);
-	//Por ahora se hace con una matriz con Tlado divisible por la cantidad de procesos
-	if(Tlado%cantProcesos!=0){
-		printf("No es divisible lado por cantidad de procesos %d\n",cantProcesos);
-		exit(1);
-	}
 
 	struct Multiplicacion multiplos=getMultiplicacionBalanceada(cantProcesos);
-	printf("Multiplos: %d x %d\n",multiplos.numero1,multiplos.numero2);
+	/* printf("Multiplos: %d x %d\n",multiplos.numero1,multiplos.numero2); */
 
 
 	int pasos = atoi(argv[2]); //M --> Cantidad de pasos
@@ -69,7 +64,7 @@ int main(int argc, char *argv[]) {
 
 	//crear grilla cuadrada
 	int dims[]={multiplos.numero1,multiplos.numero2};
-	printf("dims: %d, %d\n",dims[0],dims[1]);
+	/* printf("dims: %d, %d\n",dims[0],dims[1]); */
 	int periods[]={0,0};
 	MPI_Comm cart;
 	MPI_Cart_create(MPI_COMM_WORLD,2,dims,periods,0,&cart);
@@ -84,20 +79,24 @@ int main(int argc, char *argv[]) {
 	int columnaP=coords[1];
 	int filas = Tlado/multiplos.numero1;
 	int columnas = Tlado/multiplos.numero2;
-	printf("filas: %d, columnas: %d\n",filas,columnas);
 	int columnasT=Tlado;
 	int filasT=Tlado;
 
-	float *fila_arriba = malloc(sizeof(float)*columnas);
-	float *fila_abajo = malloc(sizeof(float)*columnas);
-	float *columna_izquierda = malloc(sizeof(float)*filas);
-	float *columna_derecha = malloc(sizeof(float)*filas);
+	int restoFilas=Tlado%multiplos.numero1;
+	int restoColumnas=Tlado%multiplos.numero2;
+
+	int filaOr=filas;
+	int colOr=columnas;
+	if(filaP<restoFilas){
+		filas++;
+	}
+	if(columnaP<restoColumnas){
+		columnas++;
+	}
+
+	/* printf("rank: %d, restofilas: %d, filas: %d, columnas: %d\n",rank,restoFilas,filas,columnas); */
+
 	
-	//Definir tipo de dato columna
-	
-	MPI_Datatype tipo_col;
-	MPI_Type_vector(filas,1,filas,MPI_FLOAT,&tipo_col);
-	MPI_Type_commit(&tipo_col);
 
 	int rank_arriba;
 	int rank_abajo;
@@ -110,6 +109,10 @@ int main(int argc, char *argv[]) {
 
 	int borde_sup_send	;
 
+	float *fila_arriba = malloc(sizeof(float)*columnas);
+	float *fila_abajo = malloc(sizeof(float)*columnas);
+	float *columna_izquierda = malloc(sizeof(float)*filas);
+	float *columna_derecha = malloc(sizeof(float)*filas);
 	//Solo para los procesos con bordes externo, se inicializa en cero
 	if(rank_arriba==MPI_PROC_NULL)
 		bzero(fila_arriba, sizeof(float)*columnas);
@@ -146,24 +149,50 @@ int main(int argc, char *argv[]) {
 		matrizSiguiente[i] = *matrizSiguiente + columnas * i;
 	}
 
-	printf("Inicializando\n");
 	//Inicialización de la matriz Actual
-	int limiteFilas=(filaP+1)*filas;
+	int inicioFilas=filaP*filaOr;
+	int inicioColumnas=columnaP*colOr;
+
+	int limiteFilas=(filaP+1)*filaOr;
 	int limiteColumnas=((columnaP+1)*columnas);
-	for (i = filaP*filas; i < limiteFilas; i++)
-		for (j = columnaP*columnas; j < limiteColumnas; j++)
+
+	//Primera condición quitable
+	if(filaP<restoFilas){
+		inicioFilas+=filaP;
+		limiteFilas+=filaP+1;
+	}else{
+		inicioFilas+=restoFilas;
+		limiteFilas+=restoFilas;
+	}
+	printf("rank: %d, filas: %d, columnas: %d, inicioFilas: %d, limiteFilas: %d\n",rank,filas,columnas,inicioFilas,limiteFilas);
+
+	if( columnaP<=restoColumnas){
+		inicioColumnas+=columnaP;
+		limiteColumnas+=columnaP+1;
+	}else{
+		inicioColumnas+=restoColumnas;
+		limiteColumnas+=restoColumnas;
+	}
+
+	int i2=0;
+	int j2=0;
+	for (i = inicioFilas; i < limiteFilas; i++){
+		j2=0;
+		for (j = inicioColumnas ; j < limiteColumnas; j++)
 		{
-			int i2=i%filas;
-			int j2=j%columnas;
+			/* printf("rank: %d, i2: %d, j2: %d\n",rank,i2,j2); */
 			matrizActual[i2][j2] = (float)(i+1) * (Tlado + i) * (j+1) * (Tlado + j);
 			/* printf("rank %d [%d][%d]: %f,\n",rank,i,j,matrizActual[i2][j2]); */
+			j2++;
 		}
+		i2++;
+	}
 
-	printf("Fin inicio\n");
 	/* printf("proceso: %d, fila: %d, col: %d\n",rank,coords[0],coords[1]); */
 	/* exit(0); */
 
 	//Ejecución de los pasos de simulación
+	printf("FIN INICIO rank: %d, filas: %d, columnas: %d\n",rank,filas,columnas);
 	double time_spent = sampleTime();
 
 	float e_arriba, e_abajo, e_izq, e_der, yo;
@@ -178,6 +207,11 @@ int main(int argc, char *argv[]) {
 	MPI_Request recv_abajo=MPI_REQUEST_NULL;
 	MPI_Request recv_izq=MPI_REQUEST_NULL;
 	MPI_Request recv_der=MPI_REQUEST_NULL;
+	//
+	//Definir tipo de dato columna
+	MPI_Datatype tipo_col;
+	MPI_Type_vector(filas,1,filas,MPI_FLOAT,&tipo_col);
+	MPI_Type_commit(&tipo_col);
 
 	for (p = 0; p < pasos; p++) {
 
@@ -306,8 +340,7 @@ int main(int argc, char *argv[]) {
 	} //Fin de pasos
 
 	time_spent = sampleTime() - time_spent;
-	printf("Tlado: %d, Pasos: %d\n", Tlado, pasos);
-	printf("Tiempo de ejecución: %.5f segundos.\n", time_spent);
+	printf("----- rank: %d, Tiempo de ejecución: %.5f segundos.\n",rank, time_spent);
 
 	//Se almacena la matriz final en un archivo
 	char nombre[30];
@@ -320,14 +353,13 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 	/* printf("rank %d: escribiendo %s\n",rank,nombre); */
-	printf("filas: %d, columnas: %d\n",filas,columnas);
 
 	/* printf("rank: %d, coords[0]: %d, coords[1]: %d\n",rank,coords[0],coords[1]); */
 
 	for (i = 0; i <  filas; i++) {
 		for (j = 0; j < columnas; j++){
 			/* printf("rank %d: %d - %d\n",rank,i,j); */
-			printf("rank %d [%d][%d]: %f,\n",rank,i,j,matrizActual[i][j]);
+			/* printf("rank %d [%d][%d]: %f,\n",rank,i,j,matrizActual[i][j]); */
 			fprintf(f, "%8.3f ", matrizActual[i][j]);
 		}
 		fprintf(f, "\n");
