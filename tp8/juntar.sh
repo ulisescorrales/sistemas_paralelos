@@ -1,5 +1,4 @@
 #!/bin/bash
-
 index_row=$(ls subgrid*.out | sort -V | tail -1 | sed 's/_/ /g' | awk '{print $2}')
 
 echo -n > grid.out
